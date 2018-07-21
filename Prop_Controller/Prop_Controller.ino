@@ -1,15 +1,17 @@
 volatile byte  count = 0;
-byte numCount = 6; //number of pulse intervals to measure
- 
-
+byte numCount = 60; //number of pulse intervals to measure
 volatile unsigned long startTime;
 volatile unsigned long endTime;
 unsigned long copy_startTime;
 unsigned long copy_endTime;
-
+unsigned long thisMillis;
+unsigned long msSinceRPMReading = 0;
+const unsigned int __WAIT_BEFORE_ZERO_RPM = 2000;     // Number of mS to wait for an rpm_sense before assunming RPM = 0.
+unsigned long msSinceSend;                            // mSec when the last data was sent to the serial port
+const unsigned int __WAIT_BETWEEN_SENDS = 1000;       // Number of mS to wait before sending a batch of data.
+byte watchdog = 0;
 volatile boolean finishCount = false;
-float period;
-
+float period, peakRPM;
 unsigned int rpm = 0;
 
 int hrelay = 10;    // power to relay reduce pitch
@@ -24,7 +26,6 @@ int pitchIn = A6;   // pitch control in
 int efis = A4;       // pitch setting out for efis
 
 int diff = 100;     // difference of pitch control to rev to invoke if statement
-int slow = 0;      // delay time
 int led = 1000;     // led bright
 int dim = 50;       // led dimmed
 
@@ -49,22 +50,21 @@ void setup()
  analogWrite(powerled, dim);
  Serial.println("start...");
 
-  attachInterrupt(0, isrCount, FALLING);//interrupt on pin3
+ attachInterrupt(0, isrCount, FALLING);
 }
 
-void loop() {
-  {
-  pot = (analogRead(pitchIn)*1.17+1500);     // pot set to pitch lever rpm setting *1.17+1500
-  land = digitalRead(landSw);                // returns land switch state
 
-  
-  Serial.print("         Pitch in:  ");
-  Serial.println(pot);
-  }
+
+void loop() {
+  thisMillis = millis();                     // Read the time once
+  pot = map(pitchIn,0,1023,1500,2700);
+  //pot = (analogRead(pitchIn)*1.17+1500);     // pot set to pitch lever rpm setting *1.17+1500
+  land = digitalRead(landSw);                // returns land switch state
+  if(watchdog++ >250) watchdog = 100;
 
 {
   if (finishCount == true)
-  {
+  { 
     finishCount = false;//reset flag
     // disable interrupts, make protected copy of time values
     noInterrupts();
@@ -73,92 +73,48 @@ void loop() {
     count = 0;
     interrupts();
 
+    if(copy_endTime > copy_startTime)         // check if endTime recycled
+    {
     period = (copy_endTime - copy_startTime) / 1000.0; //micros to millis
-    //debug prints
-    Serial.print(period); //total time for numCount
-    Serial.print('\t');
-    Serial.println(period/numCount);//time between individual pulses
+    watchdog = 0;
+    rpm = numCount*5.0 * (1000.0 / period);
+    motor();
+    msSinceRPMReading = thisMillis;           // set time for this reading
+    if (rpm > peakRPM)
+    {
+      peakRPM = rpm;
+    }
    
-    rpm = 60.0 * (1000.0 / period);
+ }}
+
+   else if (thisMillis - msSinceRPMReading > __WAIT_BEFORE_ZERO_RPM)      // Is rpm = 0
+   {
+     rpm = 0;                              // At least 2s since last RPM-sense, so assume zero RPMs
+     msSinceRPMReading = thisMillis;           // Reset counter
+    digitalWrite(hrelay, LOW);
+    digitalWrite(lrelay, HIGH); 
+    Serial.println("  Start your Engine, or Oh shit! its gone quiet"); 
  
-    Serial.print("RPM = ");
-    Serial.println(rpm);
-  }
-
-
-  for(rpm; rpm <=1500;)                       // controller waits while rpm < 1500
-  {
-  digitalWrite(hrelay, LOW);
-  digitalWrite(lrelay, HIGH);
-  digitalWrite(relayledh, HIGH); 
-  Serial.println("                      waiting for rpm");
-  delay(slow); 
-  }
-  
-  for(land; land == HIGH;)                    // controller changes prop pitch for lndg/tkoff
-  {
-  digitalWrite(hrelay, LOW);
-  digitalWrite(lrelay, HIGH);
-  digitalWrite(relayledl, HIGH);
-  land = digitalRead(landSw);
-  Serial.println("                            Landing");
-  delay(slow);
-  }
-  
-  if(rpm <= pot)
-  {
-  if(rpm <= pot-diff)                         // if prop rpm is lower than pitch lever setting 
-  {
-  digitalWrite(hrelay, LOW);                  // increase pitch
-  digitalWrite(lrelay, HIGH);
-  digitalWrite(relayledl, HIGH);              // turn on relay led
-  Serial.println("                          Increasing rpm");
-  pot = (analogRead(pitchIn)*1.17+1500);       // pot set to pitch lever rpm setting *1.17+1500
-  delay(slow);
-  }
-  else if(rpm <= pot);
-  {
-  digitalWrite(hrelay,LOW);                    // remove power from relay
-  digitalWrite(relayledh, LOW);
-  delay(slow);
-  }
-  }
-  
-  if(rpm >= pot)
-  {
-  if(rpm >= pot+diff)                         // if prop rpm is greater than pitch lever setting
-  { 
-  digitalWrite(lrelay, LOW);                  // reduce pitch
-  digitalWrite(hrelay, HIGH);
-  digitalWrite(relayledh, HIGH);  
-  Serial.println("                            decreasing rpm");
-  pot = (analogRead(pitchIn)*1.17+1500);       // pot set to pitch lever rpm setting *1.17+1500
-  delay(slow);
-  }
-  else if(rpm >= pot)
-  {
-  digitalWrite(lrelay,LOW);                    // remove power from relay
-  digitalWrite(relayledl, LOW);
-  delay(slow);
-  }
-  Serial.flush();
-  }
- 
-}}
-
-
-void isrCount()
-{
-  if (count == 0)//first entry to isr
-  {
-    startTime = micros();
-  }
-
-  if (count == numCount)
-  {
-    endTime = micros();
-    finishCount = true;   
-  }
-  count++; //increment after test for numCount
+   }
 }
+   if (watchdog >= 100)
+   {
+    digitalWrite(hrelay, LOW);
+    digitalWrite(lrelay, LOW); 
+    Serial.println("  JUMP ");
+   }
+   screen();
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
