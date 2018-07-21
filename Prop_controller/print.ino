@@ -1,5 +1,4 @@
 
-
 void screen()
 {                                               // Is it time to send the data?
    if (millis() - msSinceSend > __WAIT_BETWEEN_SENDS) 

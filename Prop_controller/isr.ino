@@ -1,5 +1,4 @@
 
-
 void isrCount()
 {
   if (count == 0)         //first entry to isr
