@@ -1,3 +1,5 @@
+// use at own risk, much testing required with hardware.
+
 volatile byte  count = 0;
 byte numCount = 60; //number of pulse intervals to measure
 volatile unsigned long startTime;
