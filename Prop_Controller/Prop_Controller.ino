@@ -1,7 +1,8 @@
 // use at own risk, much testing required with hardware.
 
 volatile byte  count = 0;
-byte numCount = 60; //number of pulse intervals to measure
+byte numCount = 60;                                   //number of pulse intervals to measure
+int pulse = 12;                                       // triggers per rev  
 volatile unsigned long startTime;
 volatile unsigned long endTime;
 unsigned long copy_startTime;
@@ -47,8 +48,8 @@ int land;
 void setup()
 {
  Serial.begin(38400); 
- digitalWrite(hrelay, HIGH);    // LOW is on
- digitalWrite(lrelay, HIGH);    // LOW is on
+ digitalWrite(hrelay, LOW);    // is LOW or HIGH = relay on? FFS this gets me confused
+ digitalWrite(lrelay, LOW);    
  pinMode(hrelay, OUTPUT); 
  pinMode(lrelay, OUTPUT); 
  pinMode(powerled,OUTPUT);
@@ -61,6 +62,8 @@ void setup()
  pinMode(2,INPUT_PULLUP);
  analogWrite(powerled, dim);
  Serial.println("start...");
+ Serial.println("\t\t\t" "Welcome to Ruffasgutsair, your completely dodgy airline");
+ Serial.println("\t\t\t" "Hang on tight, If your religious, good time to pray!");
 
 attachInterrupt(0, isrCount, FALLING);
 }
@@ -106,7 +109,7 @@ void motor()
 //else if(rpm <= pot);
   else
   {
-  digitalWrite(hrelay,LOW);                   // remove power from relay
+  digitalWrite(hrelay,LOW);                   // was increasing pitch, now remove power from relay
   //digitalWrite(relayledh, LOW);
   }
   }
@@ -124,7 +127,7 @@ void motor()
   }
 //else if(rpm >= pot)
   else {
-    digitalWrite(lrelay,LOW);                    // remove power from relay
+    digitalWrite(lrelay,LOW);                    // Was decreasing pitch, now remove power from relay
     digitalWrite(relayledl, LOW);
     }
 }} 
@@ -169,7 +172,7 @@ void loop()
     pot = analogRead(pitchIn);
     erpm = map(pot,0,1023,0,255);
     pot = map(pot,0,1023,1500,2600);
-    analogWrite(efis, erpm);
+    analogWrite(efis, erpm);                      // send prop setting to efis
 //pot = (analogRead(pitchIn)*1.17+1500);         // pot set to pitch lever rpm setting *1.17+1500
    land = digitalRead(landSw);                     // returns land switch state
     
@@ -188,10 +191,10 @@ void loop()
     interrupts();
     period = (copy_endTime - copy_startTime) / 1000.0;              //micros to millis
     watchdog = 0;
-    rpm = numCount*5.0 * (1000.0 / period);
+    rpm = numCount*(60/pulse)*(1000.0 / period);
     msSinceRPMReading = thisMillis;                                 // set time for this reading
     motor();
-    if (rpm > peakRPM) {peakRPM = rpm;}
+    if (rpm > peakRPM) {peakRPM = rpm;}                             // update peak rpm
   }
     if (thisMillis - msSinceRPMReading > __WAIT_BEFORE_ZERO_RPM)      // Is rpm = 0
   {                                                                  // At least 2s since last RPM-sense, so assume zero RPMs
@@ -206,13 +209,13 @@ void loop()
     watchdog++;
    }
     if (watchdog >250){watchdog = 12; }  
-    if (watchdog > 10)
-    {
-    digitalWrite(hrelay, LOW);
+    if (watchdog > 10)                                              
+    {                                                               // if there is noise = sensor malfunction
+    digitalWrite(hrelay, LOW);                                      // turn controller off & go to manual control
     digitalWrite(lrelay, LOW);
-    msg2 = true; 
-    msg1 = false;
-    }
+    msg2 = true;                                                    
+    msg1 = false;                                                   // no noise = flight will be over soon
+    }                                                               // Thankyou for flying Ruffasgutsair
    
    screen(); 
 }}
